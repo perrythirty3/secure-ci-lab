@@ -6,13 +6,9 @@ on:
     types: [ opened, synchronize, reopened, ready_for_review ]
   push:
     branches: [ main ]
-
   workflow_dispatch: {}
-
-  workflow_dispatch:
-
   schedule:
-    - cron: "0 * * * *"   # every hour (UTC)
+    - cron: "0 */1 * * *"   # every 1 hour (UTC)
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -23,9 +19,7 @@ jobs:
   iac_scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-
+      - uses: actions/checkout@v5
       - name: Print trigger info (iac_scan)
         run: |
           TS="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
@@ -36,7 +30,6 @@ jobs:
           echo "Started at:  $TS"
           echo "Run URL:     https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           echo "::endgroup::"
-
       - name: Checkov (Terraform)
         uses: bridgecrewio/checkov-action@v12
         with:
@@ -54,24 +47,11 @@ jobs:
       id-token: write
       contents: read
       packages: write
-
+    # compute env from secrets ONCE; then use env in `if:` expressions
     env:
-      # If you set this repo secret, OIDC/AWS steps will run; otherwise they’re skipped.
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Print trigger info
-        run: |
-          TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-          echo "Triggered by:  ${{ github.event_name }}"
-          echo "Ref:           ${{ github.ref }}"
-          echo "SHA:           ${{ github.sha }}"
-          echo "Started at:    $TS"
-          echo "Run URL:       https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
-    steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Print trigger info (build_and_scan)
         run: |
@@ -84,10 +64,8 @@ jobs:
           echo "Run URL:     https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           echo "::endgroup::"
 
-
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -96,23 +74,17 @@ jobs:
 
       # OIDC (optional): runs only if AWS_ACCOUNT_ID env is non-empty
       - name: Configure AWS creds via OIDC
-
         if: ${{ env.AWS_ACCOUNT_ID != '' }}
-
-        if: ${{ secrets.AWS_ACCOUNT_ID != '' }}
-
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/GhActions-ReadSecrets
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/GhActions-ReadSecrets
           aws-region: us-east-2
 
       - name: Get secret (optional)
-        if: ${{ secrets.AWS_ACCOUNT_ID != '' }}
+        if: ${{ env.AWS_ACCOUNT_ID != '' }}
         id: sm
         run: |
-          val=$(aws secretsmanager get-secret-value \
-                --secret-id secure-ci/api_key \
-                --query SecretString --output text || echo '{}')
+          val=$(aws secretsmanager get-secret-value --secret-id secure-ci/api_key --query SecretString --output text || echo '{}')
           echo "api_key=$(echo "$val" | jq -r .api_key)" >> "$GITHUB_OUTPUT"
 
       - name: Trivy FS scan (deps)
@@ -151,4 +123,3 @@ jobs:
         run: |
           docker tag ghcr.io/${{ github.repository }}/web:${{ github.sha }} ghcr.io/${{ github.repository }}/web:web
           docker push ghcr.io/${{ github.repository }}/web:web
-
