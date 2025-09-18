@@ -14,3 +14,4 @@ A tiny lab that demonstrates **secure CI/CD**:
 ## k8s demo (optional)
 - `k3d cluster create labby`
 - `kubectl apply -f k8s/`
+# Tiny change to trigger CI
