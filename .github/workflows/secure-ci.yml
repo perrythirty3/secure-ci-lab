@@ -67,8 +67,7 @@ jobs:
           echo "SHA:           ${{ github.sha }}"
           echo "Started at:    $TS"
           echo "Run URL:       https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
-    steps:
+          
       - uses: actions/checkout@v4
 
       - name: Print trigger info (build_and_scan)
