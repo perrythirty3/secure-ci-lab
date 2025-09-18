@@ -10,11 +10,7 @@ on:
   
   schedule:
     - cron: "0 */1 * * *"   # every 1 hour(s) (UTC)
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
+    
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
