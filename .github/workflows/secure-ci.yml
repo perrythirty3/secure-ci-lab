@@ -6,11 +6,7 @@ on:
     types: [ opened, synchronize, reopened, ready_for_review ]
   push:
     branches: [ main ]
-
   workflow_dispatch: {}
-
-  workflow_dispatch:
-
   schedule:
     - cron: "0 * * * *"   # every hour (UTC)
 
@@ -24,7 +20,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
 
       - name: Print trigger info (iac_scan)
         run: |
@@ -43,7 +38,7 @@ jobs:
           directory: iac
           framework: terraform
           quiet: true
-          soft_fail: true           # flip to false when you want failures to block
+          soft_fail: true
           output_format: github_failed_only
 
   # ---- Build, scan, and push container -------------------------------------
@@ -55,20 +50,9 @@ jobs:
       contents: read
       packages: write
 
+    # Map once so we can use it in if:/strings
     env:
-      # If you set this repo secret, OIDC/AWS steps will run; otherwise they’re skipped.
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Print trigger info
-        run: |
-          TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-          echo "Triggered by:  ${{ github.event_name }}"
-          echo "Ref:           ${{ github.ref }}"
-          echo "SHA:           ${{ github.sha }}"
-          echo "Started at:    $TS"
-          echo "Run URL:       https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
     steps:
       - uses: actions/checkout@v4
@@ -84,7 +68,6 @@ jobs:
           echo "Run URL:     https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           echo "::endgroup::"
 
-
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -96,18 +79,14 @@ jobs:
 
       # OIDC (optional): runs only if AWS_ACCOUNT_ID env is non-empty
       - name: Configure AWS creds via OIDC
-
         if: ${{ env.AWS_ACCOUNT_ID != '' }}
-
-        if: ${{ secrets.AWS_ACCOUNT_ID != '' }}
-
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/GhActions-ReadSecrets
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/GhActions-ReadSecrets
           aws-region: us-east-2
 
       - name: Get secret (optional)
-        if: ${{ secrets.AWS_ACCOUNT_ID != '' }}
+        if: ${{ env.AWS_ACCOUNT_ID != '' }}
         id: sm
         run: |
           val=$(aws secretsmanager get-secret-value \
@@ -151,4 +130,3 @@ jobs:
         run: |
           docker tag ghcr.io/${{ github.repository }}/web:${{ github.sha }} ghcr.io/${{ github.repository }}/web:web
           docker push ghcr.io/${{ github.repository }}/web:web
-
