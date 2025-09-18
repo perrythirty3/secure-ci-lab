@@ -5,7 +5,7 @@ data "aws_iam_policy_document" "gh_oidc_trust" {
     actions = ["sts:AssumeRoleWithWebIdentity"]
     principals {
       type        = "Federated"
-      identifiers = ["arn:aws:iam::\:oidc-provider/token.actions.githubusercontent.com"]
+      identifiers = ["arn:aws:iam::oidc-provider/token.actions.githubusercontent.com"]
     }
     condition {
       test     = "StringLike"
