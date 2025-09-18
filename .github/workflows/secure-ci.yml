@@ -21,6 +21,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Print trigger info (iac_scan)
+        run: |
+          TS="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          echo "::group::Trigger context"
+          echo "Triggered by: ${{ github.event_name }}"
+          echo "Ref:         ${{ github.ref }}"
+          echo "SHA:         ${{ github.sha }}"
+          echo "Started at:  $TS"
+          echo "Run URL:     https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "::endgroup::"
+
       - name: Checkov (Terraform)
         uses: bridgecrewio/checkov-action@v12
         with:
@@ -38,20 +49,24 @@ jobs:
       id-token: write
       contents: read
       packages: write
+
+    # Map once so we can use it in if:/strings
     env:
-      # If you set this repo secret, OIDC/AWS steps will run; otherwise they’re skipped.
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Print trigger info
+      - name: Print trigger info (build_and_scan)
         run: |
-          TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-          echo "Triggered by:  ${{ github.event_name }}"
-          echo "Ref:           ${{ github.ref }}"
-          echo "SHA:           ${{ github.sha }}"
-          echo "Started at:    $TS"
-          echo "Run URL:       https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          TS="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          echo "::group::Trigger context"
+          echo "Triggered by: ${{ github.event_name }}"
+          echo "Ref:         ${{ github.ref }}"
+          echo "SHA:         ${{ github.sha }}"
+          echo "Started at:  $TS"
+          echo "Run URL:     https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "::endgroup::"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
