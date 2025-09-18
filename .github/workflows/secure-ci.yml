@@ -6,7 +6,11 @@ on:
     types: [ opened, synchronize, reopened, ready_for_review ]
   push:
     branches: [ main ]
-  workflow_dispatch:
+  workflow_dispatch: {}
+  
+  schedule:
+    - cron: "0 */4 * * *"   # every 4 hours (UTC)
+
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -59,11 +63,6 @@ jobs:
 
         if: ${{ env.AWS_ACCOUNT_ID != '' }}
         uses: aws-actions/configure-aws-credentials@v4
-
-        if: ${{ secrets.AWS_ACCOUNT_ID != '' }}
-
-        uses: aws-actions/configure-aws-credentials@v4
-
 
 
         with:
