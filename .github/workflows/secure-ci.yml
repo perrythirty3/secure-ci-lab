@@ -6,7 +6,11 @@ on:
     types: [ opened, synchronize, reopened, ready_for_review ]
   push:
     branches: [ main ]
-  workflow_dispatch:
+  workflow_dispatch: {}
+  
+  schedule:
+    - cron: "0 */4 * * *"   # every 4 hours (UTC)
+
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -53,6 +57,11 @@ jobs:
       - name: Configure AWS creds via OIDC
         if: ${{ env.AWS_ACCOUNT_ID != '' }}
         uses: aws-actions/configure-aws-credentials@v4
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> 7c7f7df (added cron job to automate)
         with:
           role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/GhActions-ReadSecrets
           aws-region: us-east-2
