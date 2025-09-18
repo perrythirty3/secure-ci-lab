@@ -1,3 +1,5 @@
+on:
+  workflow_dispatch:
 name: secure-ci
 
 on:
@@ -115,3 +117,4 @@ jobs:
         run: |
           docker tag ghcr.io/${{ github.repository }}/web:${{ github.sha }} ghcr.io/${{ github.repository }}/web:web
           docker push ghcr.io/${{ github.repository }}/web:web
+
