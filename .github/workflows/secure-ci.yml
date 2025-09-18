@@ -13,7 +13,7 @@ jobs:
   iac_scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Checkov (Terraform)
         uses: bridgecrewio/checkov-action@v12
         with:
@@ -33,7 +33,11 @@ jobs:
       contents: read
       packages: write
     steps:
+
       - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v5
+
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -47,7 +51,11 @@ jobs:
       # ---- OIDC to AWS (optional; runs only if you set the secret) ----------
       - name: Configure AWS creds via OIDC
         if: ${{ secrets.AWS_ACCOUNT_ID != '' }}
+
         uses: aws-actions/configure-aws-credentials@v4
+
+        uses: aws-actions/configure-aws-credentials@v5
+
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/GhActions-ReadSecrets
           aws-region: us-east-2
