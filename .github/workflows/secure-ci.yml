@@ -102,6 +102,8 @@ jobs:
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'HIGH,CRITICAL'
+          format: 'json'
+          output: 'reports/trivy-fs.json'
           exit-code: '1'
 
       - name: Trivy Image scan
@@ -111,6 +113,8 @@ jobs:
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'HIGH,CRITICAL'
+          format: 'json'
+          output: 'reports/trivy-image.json'
           exit-code: '1'
 
       - name: Login GHCR
@@ -130,3 +134,88 @@ jobs:
         run: |
           docker tag ghcr.io/${{ github.repository }}/web:${{ github.sha }} ghcr.io/${{ github.repository }}/web:web
           docker push ghcr.io/${{ github.repository }}/web:web
+
+  # ---- Deploy to staging ----------------------------------------------------
+  deploy_staging:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    needs: [ build_and_scan ]
+    environment:
+      name: staging
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to STAGING
+        run: |
+          echo "Deploying commit ${{ github.sha }} to STAGING"
+          # your staging deploy script/cli goes here
+          # e.g., helm upgrade --install ... --namespace staging
+
+  # ---- Promote to production ------------------------------------------------
+  promote_to_prod:
+    needs: [ deploy_staging ]
+    environment:
+      name: production
+      # url: https://your.prod.example.com  # optional
+    runs-on: ubuntu-latest
+    steps:
+      - name: Promote to PRODUCTION
+        run: |
+          echo "Promoting ${{ github.sha }} to PRODUCTION"
+          # your prod deploy script/cli goes here
+          # e.g., helm upgrade --install ... --namespace prod
+
+  summary:
+    name: Security Summary
+    needs: [ iac_scan, build_and_scan ]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download reports
+        uses: actions/download-artifact@v4
+        with:
+          path: reports
+
+      - name: Render Summary
+        shell: bash
+        run: |
+          echo "# 🔎 Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # ---- Checkov (IaC) ----
+          if [ -f reports/checkov-json/checkov.json ]; then
+            jf="reports/checkov-json/checkov.json"
+            pass=$(jq '.summary.passed // 0' "$jf")
+            fail=$(jq '.summary.failed // 0' "$jf")
+            skip=$(jq '.summary.skipped // 0' "$jf")
+            echo "## 🧱 Checkov (Terraform)" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Passed | Failed | Skipped |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| -----: | -----: | ------: |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| $pass | $fail | $skip |" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # helper to make a sev table from a Trivy JSON file
+          trivy_table () {
+            file="$1"
+            jq -r '
+              [ .Results[]?.Vulnerabilities[]? | .Severity ] 
+              | reduce .[] as $s ( {"CRITICAL":0,"HIGH":0,"MEDIUM":0,"LOW":0,"UNKNOWN":0}; .[$s]+=1 )
+              | "| CRITICAL | HIGH | MEDIUM | LOW | UNKNOWN |\n| --: | --: | --: | --: | --: |\n| \(.CRITICAL) | \(.HIGH) | \(.MEDIUM) | \(.LOW) | \(.UNKNOWN) |"
+            ' "$file"
+          }
+
+          # ---- Trivy FS ----
+          if [ -f reports/trivy-json/trivy-fs.json ]; then
+            echo "## 📦 Trivy (Filesystem / deps)" >> "$GITHUB_STEP_SUMMARY"
+            trivy_table "reports/trivy-json/trivy-fs.json" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # ---- Trivy Image ----
+          if [ -f reports/trivy-json/trivy-image.json ]; then
+            echo "## 🐳 Trivy (Container Image)" >> "$GITHUB_STEP_SUMMARY"
+            trivy_table "reports/trivy-json/trivy-image.json" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          echo "> _Artifacts with full JSON are attached to this run for deep dive._" >> "$GITHUB_STEP_SUMMARY"
