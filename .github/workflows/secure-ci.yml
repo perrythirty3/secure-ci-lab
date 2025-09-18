@@ -109,3 +109,6 @@ jobs:
         run: |
           docker tag ghcr.io/${{ github.repository }}/web:${{ github.sha }} ghcr.io/${{ github.repository }}/web:web
           docker push ghcr.io/${{ github.repository }}/web:web
+
+      - name: Print trigger info
+        run: echo "Triggered by ${{ github.event_name }} at ${{ github.run_started_at }}"
