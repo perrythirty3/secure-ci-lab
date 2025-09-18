@@ -8,7 +8,7 @@ on:
     branches: [ main ]
   workflow_dispatch: {}
   schedule:
-    - cron: "0 * * * *"   # every hour (UTC)
+    - cron: "*/15 * * * *"   # every 15 minutes (UTC)
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -38,6 +38,19 @@ jobs:
           quiet: true
           soft_fail: true
           output_format: github_failed_only
+
+      - name: Save Checkov JSON
+        run: |
+          mkdir -p reports
+          # Re-run via CLI in JSON just for reporting (soft-fail for pipeline)
+          checkov -d iac -o json > reports/checkov.json || true
+
+      - name: Upload Checkov report
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkov-json
+          path: reports/checkov.json
+
 
   # ---- Build, scan, and push container -------------------------------------
   build_and_scan:
