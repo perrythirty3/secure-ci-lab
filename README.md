@@ -1,5 +1,9 @@
 # secure-ci-lab
 
+[![secure-ci](https://github.com/${OWNER}/${REPO}/actions/workflows/secure-ci.yml/badge.svg)](../../actions/workflows/secure-ci.yml)
+![Schedule](https://img.shields.io/badge/schedule-hourly-blue)
+
+
 A tiny lab that demonstrates **secure CI/CD**:
 - IaC scanning with **Checkov**
 - App + container scanning with **Trivy**
