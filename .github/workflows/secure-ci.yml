@@ -9,6 +9,8 @@ on:
 
   workflow_dispatch: {}
 
+  workflow_dispatch:
+
   schedule:
     - cron: "0 * * * *"   # every hour (UTC)
 
@@ -67,7 +69,8 @@ jobs:
           echo "SHA:           ${{ github.sha }}"
           echo "Started at:    $TS"
           echo "Run URL:       https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          
+
+    steps:
       - uses: actions/checkout@v4
 
       - name: Print trigger info (build_and_scan)
@@ -93,6 +96,8 @@ jobs:
 
       # OIDC (optional): runs only if AWS_ACCOUNT_ID env is non-empty
       - name: Configure AWS creds via OIDC
+
+        if: ${{ env.AWS_ACCOUNT_ID != '' }}
 
         if: ${{ secrets.AWS_ACCOUNT_ID != '' }}
 
