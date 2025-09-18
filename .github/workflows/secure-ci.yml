@@ -8,7 +8,7 @@ on:
     branches: [ main ]
   workflow_dispatch: {}
   schedule:
-    - cron: "0 */1 * * *"   # every 1 hour (UTC)
+    - cron: "0 * * * *"   # every hour (UTC)
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -19,24 +19,15 @@ jobs:
   iac_scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - name: Print trigger info (iac_scan)
-        run: |
-          TS="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          echo "::group::Trigger context"
-          echo "Triggered by: ${{ github.event_name }}"
-          echo "Ref:         ${{ github.ref }}"
-          echo "SHA:         ${{ github.sha }}"
-          echo "Started at:  $TS"
-          echo "Run URL:     https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          echo "::endgroup::"
+      - uses: actions/checkout@v4
+
       - name: Checkov (Terraform)
         uses: bridgecrewio/checkov-action@v12
         with:
           directory: iac
           framework: terraform
           quiet: true
-          soft_fail: true           # flip to false when you want failures to block
+          soft_fail: true
           output_format: github_failed_only
 
   # ---- Build, scan, and push container -------------------------------------
@@ -47,25 +38,24 @@ jobs:
       id-token: write
       contents: read
       packages: write
-    # compute env from secrets ONCE; then use env in `if:` expressions
     env:
+      # If you set this repo secret, OIDC/AWS steps will run; otherwise they’re skipped.
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
-      - name: Print trigger info (build_and_scan)
+      - name: Print trigger info
         run: |
-          TS="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          echo "::group::Trigger context"
-          echo "Triggered by: ${{ github.event_name }}"
-          echo "Ref:         ${{ github.ref }}"
-          echo "SHA:         ${{ github.sha }}"
-          echo "Started at:  $TS"
-          echo "Run URL:     https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          echo "::endgroup::"
+          TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          echo "Triggered by:  ${{ github.event_name }}"
+          echo "Ref:           ${{ github.ref }}"
+          echo "SHA:           ${{ github.sha }}"
+          echo "Started at:    $TS"
+          echo "Run URL:       https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
+
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -84,7 +74,9 @@ jobs:
         if: ${{ env.AWS_ACCOUNT_ID != '' }}
         id: sm
         run: |
-          val=$(aws secretsmanager get-secret-value --secret-id secure-ci/api_key --query SecretString --output text || echo '{}')
+          val=$(aws secretsmanager get-secret-value \
+                --secret-id secure-ci/api_key \
+                --query SecretString --output text || echo '{}')
           echo "api_key=$(echo "$val" | jq -r .api_key)" >> "$GITHUB_OUTPUT"
 
       - name: Trivy FS scan (deps)
