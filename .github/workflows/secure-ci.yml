@@ -7,10 +7,8 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch: {}
-  
   schedule:
-    - cron: "0 */1 * * *"   # every 1 hour(s) (UTC)
-
+    - cron: "0 */1 * * *"   # every 1 hour (UTC)
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -21,14 +19,24 @@ jobs:
   iac_scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      - name: Print trigger info (iac_scan)
+        run: |
+          TS="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          echo "::group::Trigger context"
+          echo "Triggered by: ${{ github.event_name }}"
+          echo "Ref:         ${{ github.ref }}"
+          echo "SHA:         ${{ github.sha }}"
+          echo "Started at:  $TS"
+          echo "Run URL:     https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "::endgroup::"
       - name: Checkov (Terraform)
         uses: bridgecrewio/checkov-action@v12
         with:
           directory: iac
           framework: terraform
           quiet: true
-          soft_fail: true
+          soft_fail: true           # flip to false when you want failures to block
           output_format: github_failed_only
 
   # ---- Build, scan, and push container -------------------------------------
@@ -43,7 +51,18 @@ jobs:
     env:
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+
+      - name: Print trigger info (build_and_scan)
+        run: |
+          TS="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          echo "::group::Trigger context"
+          echo "Triggered by: ${{ github.event_name }}"
+          echo "Ref:         ${{ github.ref }}"
+          echo "SHA:         ${{ github.sha }}"
+          echo "Started at:  $TS"
+          echo "Run URL:     https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "::endgroup::"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -57,11 +76,6 @@ jobs:
       - name: Configure AWS creds via OIDC
         if: ${{ env.AWS_ACCOUNT_ID != '' }}
         uses: aws-actions/configure-aws-credentials@v4
-<<<<<<< HEAD
-=======
-
-
->>>>>>> 7c7f7df (added cron job to automate)
         with:
           role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/GhActions-ReadSecrets
           aws-region: us-east-2
@@ -109,6 +123,3 @@ jobs:
         run: |
           docker tag ghcr.io/${{ github.repository }}/web:${{ github.sha }} ghcr.io/${{ github.repository }}/web:web
           docker push ghcr.io/${{ github.repository }}/web:web
-
-      - name: Print trigger info
-        run: echo "Triggered by ${{ github.event_name }} at ${{ github.run_started_at }}"
