@@ -10,7 +10,7 @@ on:
   
   schedule:
     - cron: "0 */1 * * *"   # every 1 hour(s) (UTC)
-    
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -51,9 +51,8 @@ jobs:
           echo "Triggered by: ${{ github.event_name }}"
           echo "Ref:         ${{ github.ref }}"
           echo "SHA:         ${{ github.sha }}"
+          echo "Started at:  $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           echo "Started at:  ${{ github.run_started_at }}"
-
-
 
 
       - name: Set up QEMU
