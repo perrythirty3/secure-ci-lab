@@ -15,6 +15,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # ---- IaC scan (Checkov) ---------------------------------------------------
   iac_scan:
@@ -55,6 +59,7 @@ jobs:
 
 
 
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Buildx
@@ -68,7 +73,6 @@ jobs:
 
         if: ${{ env.AWS_ACCOUNT_ID != '' }}
         uses: aws-actions/configure-aws-credentials@v4
-
 
         with:
           role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/GhActions-ReadSecrets
