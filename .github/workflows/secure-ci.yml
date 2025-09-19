@@ -142,6 +142,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: reports/trivy-image.json
+          category: trivy-image
 
       # --- SARIF for Security tab ---
       - name: Trivy FS scan (SARIF)
@@ -157,6 +158,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: reports/trivy-fs.sarif
+          category: trivy-fs
 
       # --- Upload artifacts used by the summary job ---
       - name: Upload Trivy FS JSON
