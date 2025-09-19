@@ -55,6 +55,7 @@ jobs:
       id-token: write
       contents: read
       packages: write
+      security-events: write
       # security-events is inherited from the top-level
 
     env:
