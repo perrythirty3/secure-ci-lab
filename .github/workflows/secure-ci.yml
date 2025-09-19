@@ -47,6 +47,23 @@ jobs:
           output_format: github_failed_only
       # (Optional) Add a JSON output step later if you want it summarized too.
 
+  sonarcloud:
+    runs-on: ubuntu-latest
+    needs: [ iac_scan ]
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN:  ${{ secrets.SONAR_TOKEN }}
+
+
   # ---- Build, scan, and push container -------------------------------------
   build_and_scan:
     runs-on: ubuntu-latest
@@ -115,24 +132,6 @@ jobs:
           ignore-unfixed: true
           vuln-type: os,library
       
-          # SONARCLOUD 
-  sonarcloud:
-    runs-on: ubuntu-latest
-    needs: [ iac_scan ]
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
 
       # Optional stricter FS scan (don’t overwrite previous JSON)
       - name: "Trivy FS scan (deps: HIGH/CRITICAL gate)"
@@ -154,13 +153,26 @@ jobs:
           ignore-unfixed: true
           vuln-type: os,library
           severity: HIGH,CRITICAL
-          format: sarif
+          format: json                 # ← was sarif; make it json
           output: reports/trivy-image.json
           exit-code: '1'
+
+      - name: Trivy Image scan (SARIF)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: ghcr.io/${{ github.repository }}/web:${{ github.sha }}
+          format: sarif
+          output: reports/trivy-image.sarif
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+   
+
+
       - name: Upload Image SARIF to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: reports/trivy-image.json
+          sarif_file: reports/trivy-image.sarif
           category: trivy-image
 
       # --- SARIF for Security tab ---
