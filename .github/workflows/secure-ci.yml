@@ -8,15 +8,12 @@ on:
     branches: [ main ]
   workflow_dispatch: {}
   schedule:
-
     - cron: "0 */12 * * *"   # every 12 hours (UTC)
 
 # needed for SARIF upload to the Security tab
 permissions:
   contents: read
   security-events: write
-
-    - cron: "0 */12 * * *"   # every 12 hours (UTC)
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -48,9 +45,7 @@ jobs:
           quiet: true
           soft_fail: true
           output_format: github_failed_only
-
-      # (Optional) If you later want JSON for Checkov, add another step that writes JSON to reports/checkov.json and upload it as an artifact.
-
+      # (Optional) Add a JSON output step later if you want it summarized too.
 
   # ---- Build, scan, and push container -------------------------------------
   build_and_scan:
@@ -60,11 +55,8 @@ jobs:
       id-token: write
       contents: read
       packages: write
+      # security-events is inherited from the top-level
 
-      # security-events inherited from top-level
-
-
-    # Map once so we can use it in if:/strings
     env:
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
@@ -108,18 +100,11 @@ jobs:
                 --query SecretString --output text || echo '{}')
           echo "api_key=$(echo "$val" | jq -r .api_key)" >> "$GITHUB_OUTPUT"
 
-
       - name: Prepare report dir
         run: mkdir -p reports
 
-      # JSON FS scan (kept for summary + artifacts)
+      # JSON FS scan (for summary + artifacts)
       - name: Trivy FS scan (JSON)
-
-      - name: Prepare report dir
-        run: mkdir -p reports
-
-      - name: Trivy FS scan
-
         uses: aquasecurity/trivy-action@0.33.1
         with:
           scan-type: fs
@@ -128,43 +113,28 @@ jobs:
           ignore-unfixed: true
           vuln-type: os,library
 
-
-      # Optional stricter FS scan (separate output so we don't overwrite)
+      # Optional stricter FS scan (don’t overwrite previous JSON)
       - name: "Trivy FS scan (deps: HIGH/CRITICAL gate)"
-
-      - name: Trivy FS scan (deps)
-
         uses: aquasecurity/trivy-action@0.33.1
         with:
           scan-type: fs
           scan-ref: .
           ignore-unfixed: true
-
           vuln-type: os,library
           severity: HIGH,CRITICAL
           format: json
           output: reports/trivy-fs-high.json
           exit-code: '1'
 
-
       - name: Trivy Image scan (JSON)
-
-          vuln-type: 'os,library'
-          severity: 'HIGH,CRITICAL'
-          format: 'json'
-          output: 'reports/trivy-fs.json'
-          exit-code: '1'
-
-      - name: Trivy Image scan
-
         uses: aquasecurity/trivy-action@0.33.1
         with:
           image-ref: ghcr.io/${{ github.repository }}/web:${{ github.sha }}
           ignore-unfixed: true
-          vuln-type: 'os,library'
-          severity: 'HIGH,CRITICAL'
-          format: 'json'
-          output: 'reports/trivy-image.json'
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          format: json
+          output: reports/trivy-image.json
           exit-code: '1'
 
       # --- SARIF for Security tab ---
@@ -225,22 +195,20 @@ jobs:
         run: |
           echo "Deploying commit ${{ github.sha }} to STAGING"
           # your staging deploy script/cli goes here
-          # e.g., helm upgrade --install ... --namespace staging
 
   # ---- Promote to production ------------------------------------------------
   promote_to_prod:
     needs: [ deploy_staging ]
     environment:
       name: production
-      # url: https://your.prod.example.com  # optional
     runs-on: ubuntu-latest
     steps:
       - name: Promote to PRODUCTION
         run: |
           echo "Promoting ${{ github.sha }} to PRODUCTION"
           # your prod deploy script/cli goes here
-          # e.g., helm upgrade --install ... --namespace prod
 
+  # ---- Pretty run-page summary ---------------------------------------------
   summary:
     name: Security Summary
     needs: [ iac_scan, build_and_scan ]
@@ -258,63 +226,30 @@ jobs:
           echo "# 🔎 Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
-
-          # helper to make a sev table from a Trivy JSON file
           trivy_table () {
             file="$1"
             if [ ! -f "$file" ]; then
               echo "_No report found at $file_" >> "$GITHUB_STEP_SUMMARY"
               return
             fi
-
-          # ---- Checkov (IaC) ----
-          if [ -f reports/checkov-json/checkov.json ]; then
-            jf="reports/checkov-json/checkov.json"
-            pass=$(jq '.summary.passed // 0' "$jf")
-            fail=$(jq '.summary.failed // 0' "$jf")
-            skip=$(jq '.summary.skipped // 0' "$jf")
-            echo "## 🧱 Checkov (Terraform)" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "| Passed | Failed | Skipped |" >> "$GITHUB_STEP_SUMMARY"
-            echo "| -----: | -----: | ------: |" >> "$GITHUB_STEP_SUMMARY"
-            echo "| $pass | $fail | $skip |" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-          # helper to make a sev table from a Trivy JSON file
-          trivy_table () {
-            file="$1"
-
             jq -r '
-              [ .Results[]?.Vulnerabilities[]? | .Severity ] 
+              [ .Results[]?.Vulnerabilities[]? | .Severity ]
               | reduce .[] as $s ( {"CRITICAL":0,"HIGH":0,"MEDIUM":0,"LOW":0,"UNKNOWN":0}; .[$s]+=1 )
               | "| CRITICAL | HIGH | MEDIUM | LOW | UNKNOWN |\n| --: | --: | --: | --: | --: |\n| \(.CRITICAL) | \(.HIGH) | \(.MEDIUM) | \(.LOW) | \(.UNKNOWN) |"
-            ' "$file"
+            ' "$file" >> "$GITHUB_STEP_SUMMARY"
           }
 
           # ---- Trivy FS ----
-
           if [ -f reports/trivy-fs.json ]; then
             echo "## 📦 Trivy (Filesystem / deps)" >> "$GITHUB_STEP_SUMMARY"
-            trivy_table "reports/trivy-fs.json" >> "$GITHUB_STEP_SUMMARY"
-
-          if [ -f reports/trivy-json/trivy-fs.json ]; then
-            echo "## 📦 Trivy (Filesystem / deps)" >> "$GITHUB_STEP_SUMMARY"
-            trivy_table "reports/trivy-json/trivy-fs.json" >> "$GITHUB_STEP_SUMMARY"
-
+            trivy_table "reports/trivy-fs.json"
             echo "" >> "$GITHUB_STEP_SUMMARY"
           fi
 
           # ---- Trivy Image ----
-
           if [ -f reports/trivy-image.json ]; then
             echo "## 🐳 Trivy (Container Image)" >> "$GITHUB_STEP_SUMMARY"
-            trivy_table "reports/trivy-image.json" >> "$GITHUB_STEP_SUMMARY"
-
-          if [ -f reports/trivy-json/trivy-image.json ]; then
-            echo "## 🐳 Trivy (Container Image)" >> "$GITHUB_STEP_SUMMARY"
-            trivy_table "reports/trivy-json/trivy-image.json" >> "$GITHUB_STEP_SUMMARY"
-
+            trivy_table "reports/trivy-image.json"
             echo "" >> "$GITHUB_STEP_SUMMARY"
           fi
 
