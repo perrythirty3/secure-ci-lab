@@ -243,38 +243,37 @@ jobs:
         run: |
           echo "Promoting ${{ github.sha }} to PRODUCTION"
           # your prod deploy script/cli goes here
-
+          
   deploy_k8s:
     needs: [ build_and_scan ]
-    if: ${{ github.ref == 'refs/heads/main' }}   # only on main
-    environment:
-      name: staging
+    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
     env:
-      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
       EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
       AWS_REGION: us-east-2
 
     steps:
-      - name: Configure AWS creds via OIDC
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/GhActions-EksDeployer
-          aws-region: ${{ env.AWS_REGION }}
+     - name: Configure AWS creds via OIDC
+       uses: aws-actions/configure-aws-credentials@v4
+       with:
+         role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/GhActions-EksDeployer
+         aws-region: ${{ env.AWS_REGION }}
 
-      - name: Update kubeconfig for EKS
-        run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+     - name: Update kubeconfig for EKS
+       run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
 
-      - name: Sanity check cluster
-        run: |
+
+
+     - name: Sanity check cluster
+       run: |
           kubectl config current-context
           kubectl get nodes
 
-      - name: Deploy/Update app on Kubernetes
-        run: |
+     - name: Deploy/Update app on Kubernetes
+       run: |
           set -euo pipefail
           NS=demo
           APP=web
