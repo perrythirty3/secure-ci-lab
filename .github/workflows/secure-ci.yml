@@ -244,6 +244,35 @@ jobs:
           echo "Promoting ${{ github.sha }} to PRODUCTION"
           # your prod deploy script/cli goes here
 
+  deploy_k8s:
+    needs: [ build_and_scan ]
+    if: ${{ github.ref == 'refs/heads/main' }}   # only on main
+    environment:
+      name: staging
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
+      AWS_REGION: us-east-2
+
+    steps:
+      - name: Configure AWS creds via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/GhActions-EksDeployer
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig for EKS
+        run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+
+      - name: Sanity check cluster
+        run: |
+          kubectl config current-context
+          kubectl get nodes
+
       - name: Deploy/Update app on Kubernetes
         run: |
           set -euo pipefail
@@ -253,14 +282,12 @@ jobs:
 
           kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
 
-          # Create or update the Deployment
           if kubectl -n "$NS" get deploy "$APP" >/dev/null 2>&1; then
             kubectl -n "$NS" set image deploy/"$APP" "$APP"="$IMAGE" --record
           else
             kubectl -n "$NS" create deploy "$APP" --image="$IMAGE" --port=8080
           fi
 
-          # Ensure Service exists (ClusterIP)
           kubectl -n "$NS" apply -f - <<EOF
           apiVersion: v1
           kind: Service
@@ -275,80 +302,3 @@ jobs:
           EOF
 
           kubectl -n "$NS" rollout status deploy/"$APP" --timeout=120s
-
-
-  # ---- Pretty run-page summary ---------------------------------------------
-  summary:
-    name: Security Summary
-    needs: [ iac_scan, build_and_scan ]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download reports
-        uses: actions/download-artifact@v4
-        with:
-          pattern: trivy-*.json
-          path: reports
-          merge-multiple: true
-
-      - name: Render Summary
-        shell: bash
-        run: |
-          echo "# 🔎 Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-
-          # ---- Compact totals across FS + Image ----
-          if ls reports/trivy-*.json >/dev/null 2>&1; then
-            totals=$(jq -s -r '
-              def sev_count:
-                [ .Results[]?.Vulnerabilities[]? | .Severity ]
-                | reduce .[] as $s ( {"CRITICAL":0,"HIGH":0,"MEDIUM":0,"LOW":0,"UNKNOWN":0}; .[$s]+=1 );
-              reduce ( .[]? | try sev_count catch {} ) as $c
-                ( {"CRITICAL":0,"HIGH":0,"MEDIUM":0,"LOW":0,"UNKNOWN":0};
-                  .CRITICAL += ($c.CRITICAL // 0) |
-                  .HIGH     += ($c.HIGH // 0)     |
-                  .MEDIUM   += ($c.MEDIUM // 0)   |
-                  .LOW      += ($c.LOW // 0)      |
-                  .UNKNOWN  += ($c.UNKNOWN // 0)
-                )
-            ' reports/trivy-fs.json reports/trivy-image.json 2>/dev/null)
-
-            crit=$(echo "$totals" | jq -r '.CRITICAL // 0')
-            high=$(echo "$totals" | jq -r '.HIGH // 0')
-            med=$(echo "$totals" | jq -r '.MEDIUM // 0')
-            low=$(echo "$totals" | jq -r '.LOW // 0')
-            unk=$(echo "$totals" | jq -r '.UNKNOWN // 0')
-
-            echo "**Totals:** CRITICAL: $crit • HIGH: $high • MEDIUM: $med • LOW: $low • UNKNOWN: $unk" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-          # ---- Helper to render a per-report table ----
-          trivy_table () {
-            file="$1"
-            if [ ! -f "$file" ]; then
-              echo "_No report found at $file_" >> "$GITHUB_STEP_SUMMARY"
-              return
-            fi
-            jq -r '
-              [ .Results[]?.Vulnerabilities[]? | .Severity ]
-              | reduce .[] as $s ( {"CRITICAL":0,"HIGH":0,"MEDIUM":0,"LOW":0,"UNKNOWN":0}; .[$s]+=1 )
-              | "| CRITICAL | HIGH | MEDIUM | LOW | UNKNOWN |\n| --: | --: | --: | --: | --: |\n| \(.CRITICAL) | \(.HIGH) | \(.MEDIUM) | \(.LOW) | \(.UNKNOWN) |"
-            ' "$file" >> "$GITHUB_STEP_SUMMARY"
-          }
-
-          # ---- Trivy FS ----
-          if [ -f reports/trivy-fs.json ]; then
-            echo "## 📦 Trivy (Filesystem / deps)" >> "$GITHUB_STEP_SUMMARY"
-            trivy_table "reports/trivy-fs.json"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-          # ---- Trivy Image ----
-          if [ -f reports/trivy-image.json ]; then
-            echo "## 🐳 Trivy (Container Image)" >> "$GITHUB_STEP_SUMMARY"
-            trivy_table "reports/trivy-image.json"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-          echo "> _Artifacts with full JSON are attached to this run for deep dive._" >> "$GITHUB_STEP_SUMMARY"
