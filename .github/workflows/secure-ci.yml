@@ -17,8 +17,6 @@ permissions:
   security-events: write
 
 
-    - cron: "0 */12 * * *"   # every 12 hours (UTC)
-
 
 
 concurrency:
