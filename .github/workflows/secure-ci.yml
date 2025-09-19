@@ -47,6 +47,7 @@ jobs:
           output_format: github_failed_only
       # (Optional) Add a JSON output step later if you want it summarized too.
 
+  # ---- SonarCloud (PR Quality Gate) ----------------------------------------
   sonarcloud:
     runs-on: ubuntu-latest
     needs: [ iac_scan ]
@@ -63,7 +64,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN:  ${{ secrets.SONAR_TOKEN }}
 
-
   # ---- Build, scan, and push container -------------------------------------
   build_and_scan:
     runs-on: ubuntu-latest
@@ -72,9 +72,7 @@ jobs:
       id-token: write
       contents: read
       packages: write
-      security-events: write
-
-      # security-events is inherited from the top-level
+      security-events: write   # needed for SARIF uploads
 
     env:
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
@@ -131,7 +129,6 @@ jobs:
           output: reports/trivy-fs.json
           ignore-unfixed: true
           vuln-type: os,library
-      
 
       # Optional stricter FS scan (don’t overwrite previous JSON)
       - name: "Trivy FS scan (deps: HIGH/CRITICAL gate)"
@@ -153,7 +150,7 @@ jobs:
           ignore-unfixed: true
           vuln-type: os,library
           severity: HIGH,CRITICAL
-          format: json                 # ← was sarif; make it json
+          format: json
           output: reports/trivy-image.json
           exit-code: '1'
 
@@ -166,8 +163,6 @@ jobs:
           ignore-unfixed: true
           vuln-type: os,library
           severity: HIGH,CRITICAL
-   
-
 
       - name: Upload Image SARIF to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
@@ -175,7 +170,7 @@ jobs:
           sarif_file: reports/trivy-image.sarif
           category: trivy-image
 
-      # --- SARIF for Security tab ---
+      # --- SARIF for Security tab (filesystem) ---
       - name: Trivy FS scan (SARIF)
         uses: aquasecurity/trivy-action@0.33.1
         with:
@@ -197,12 +192,14 @@ jobs:
         with:
           name: trivy-fs.json
           path: reports/trivy-fs.json
+          retention-days: 7
 
       - name: Upload Trivy Image JSON
         uses: actions/upload-artifact@v4
         with:
           name: trivy-image.json
           path: reports/trivy-image.json
+          retention-days: 7
 
       - name: Login GHCR
         if: ${{ success() }}
@@ -246,6 +243,39 @@ jobs:
         run: |
           echo "Promoting ${{ github.sha }} to PRODUCTION"
           # your prod deploy script/cli goes here
+
+      - name: Deploy/Update app on Kubernetes
+        run: |
+          set -euo pipefail
+          NS=demo
+          APP=web
+          IMAGE=ghcr.io/${{ github.repository }}/web:${{ github.sha }}
+
+          kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
+
+          # Create or update the Deployment
+          if kubectl -n "$NS" get deploy "$APP" >/dev/null 2>&1; then
+            kubectl -n "$NS" set image deploy/"$APP" "$APP"="$IMAGE" --record
+          else
+            kubectl -n "$NS" create deploy "$APP" --image="$IMAGE" --port=8080
+          fi
+
+          # Ensure Service exists (ClusterIP)
+          kubectl -n "$NS" apply -f - <<EOF
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: $APP
+          spec:
+            selector:
+              app: $APP
+            ports:
+            - port: 80
+              targetPort: 8080
+          EOF
+
+          kubectl -n "$NS" rollout status deploy/"$APP" --timeout=120s
+
 
   # ---- Pretty run-page summary ---------------------------------------------
   summary:
