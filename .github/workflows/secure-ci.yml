@@ -16,8 +16,6 @@ permissions:
   contents: read
   security-events: write
 
-    - cron: "0 */12 * * *"   # every 12 hours (UTC)
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
