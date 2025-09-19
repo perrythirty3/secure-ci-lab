@@ -20,6 +20,84 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  deploy_k8s:
+    needs: [build_and_scan]
+    if: ${{ github.ref == 'refs/heads/main' }}   # branch gate only
+
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    env:
+      AWS_REGION: us-east-2
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
+
+    steps:
+      - name: "Gate: required EKS secrets present?"
+        id: gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${{ secrets.AWS_ACCOUNT_ID }}" && -n "${{ secrets.EKS_CLUSTER_NAME }}" ]]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure AWS creds via OIDC
+        if: steps.gate.outputs.ok == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/GhActions-EksDeployer
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig for EKS
+        if: steps.gate.outputs.ok == 'true'
+        run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+
+      - name: Sanity check cluster
+        if: steps.gate.outputs.ok == 'true'
+        run: |
+          kubectl config current-context
+          kubectl get nodes
+
+      - name: Deploy/Update app on Kubernetes
+        if: steps.gate.outputs.ok == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          NS=demo
+          APP=web
+          IMAGE=ghcr.io/${{ github.repository }}/web:${{ github.sha }}
+
+          kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
+
+          if kubectl -n "$NS" get deploy "$APP" >/dev/null 2>&1; then
+            kubectl -n "$NS" set image deploy/"$APP" "$APP"="$IMAGE" --record
+          else
+            kubectl -n "$NS" create deploy "$APP" --image="$IMAGE" --port=8080
+          fi
+
+          # ClusterIP Service
+          cat <<'YAML' | kubectl -n "$NS" apply -f -
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: web
+          spec:
+            selector:
+              app: web
+            ports:
+              - port: 80
+                targetPort: 8080
+          YAML
+
+          kubectl -n "$NS" rollout status deploy/"$APP" --timeout=120s
+
+
+  
   # ---- IaC scan (Checkov) ---------------------------------------------------
   iac_scan:
     runs-on: ubuntu-latest
@@ -243,61 +321,6 @@ jobs:
         run: |
           echo "Promoting ${{ github.sha }} to PRODUCTION"
           # your prod deploy script/cli goes here
+
+# ---- Deploy to EKS (if configured) ----------------------------------------        
           
-  deploy_k8s:
-    needs: [ build_and_scan ]
-    if: ${{ github.ref == 'refs/heads/main' }}
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-    env:
-      EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
-      AWS_REGION: us-east-2
-
-    steps:
-     - name: Configure AWS creds via OIDC
-       uses: aws-actions/configure-aws-credentials@v4
-       with:
-         role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/GhActions-EksDeployer
-         aws-region: ${{ env.AWS_REGION }}
-
-     - name: Update kubeconfig for EKS
-       run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
-
-
-
-     - name: Sanity check cluster
-       run: |
-          kubectl config current-context
-          kubectl get nodes
-
-     - name: Deploy/Update app on Kubernetes
-       run: |
-          set -euo pipefail
-          NS=demo
-          APP=web
-          IMAGE=ghcr.io/${{ github.repository }}/web:${{ github.sha }}
-
-          kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
-
-          if kubectl -n "$NS" get deploy "$APP" >/dev/null 2>&1; then
-            kubectl -n "$NS" set image deploy/"$APP" "$APP"="$IMAGE" --record
-          else
-            kubectl -n "$NS" create deploy "$APP" --image="$IMAGE" --port=8080
-          fi
-
-          kubectl -n "$NS" apply -f - <<EOF
-          apiVersion: v1
-          kind: Service
-          metadata:
-            name: $APP
-          spec:
-            selector:
-              app: $APP
-            ports:
-            - port: 80
-              targetPort: 8080
-          EOF
-
-          kubectl -n "$NS" rollout status deploy/"$APP" --timeout=120s
