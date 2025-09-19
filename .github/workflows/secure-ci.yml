@@ -95,6 +95,17 @@ jobs:
                 --secret-id secure-ci/api_key \
                 --query SecretString --output text || echo '{}')
           echo "api_key=$(echo "$val" | jq -r .api_key)" >> "$GITHUB_OUTPUT"
+      - name: Prepare report dir
+        run: mkdir -p reports
+
+      - name: Trivy FS scan
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: fs
+          format: json
+          output: reports/trivy-fs.json
+          ignore-unfixed: true
+          vuln-type: os,library
 
       - name: Trivy FS scan (deps)
         uses: aquasecurity/trivy-action@0.33.1
