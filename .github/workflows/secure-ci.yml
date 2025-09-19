@@ -220,7 +220,9 @@ jobs:
       - name: Download reports
         uses: actions/download-artifact@v4
         with:
+          pattern: trivy-*.json
           path: reports
+          merge-multiple: true
 
       - name: Render Summary
         shell: bash
@@ -228,6 +230,33 @@ jobs:
           echo "# 🔎 Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
+          # ---- Compact totals across FS + Image ----
+          if ls reports/trivy-*.json >/dev/null 2>&1; then
+            totals=$(jq -s -r '
+              def sev_count:
+                [ .Results[]?.Vulnerabilities[]? | .Severity ]
+                | reduce .[] as $s ( {"CRITICAL":0,"HIGH":0,"MEDIUM":0,"LOW":0,"UNKNOWN":0}; .[$s]+=1 );
+              reduce ( .[]? | try sev_count catch {} ) as $c
+                ( {"CRITICAL":0,"HIGH":0,"MEDIUM":0,"LOW":0,"UNKNOWN":0};
+                  .CRITICAL += ($c.CRITICAL // 0) |
+                  .HIGH     += ($c.HIGH // 0)     |
+                  .MEDIUM   += ($c.MEDIUM // 0)   |
+                  .LOW      += ($c.LOW // 0)      |
+                  .UNKNOWN  += ($c.UNKNOWN // 0)
+                )
+            ' reports/trivy-fs.json reports/trivy-image.json 2>/dev/null)
+
+            crit=$(echo "$totals" | jq -r '.CRITICAL // 0')
+            high=$(echo "$totals" | jq -r '.HIGH // 0')
+            med=$(echo "$totals" | jq -r '.MEDIUM // 0')
+            low=$(echo "$totals" | jq -r '.LOW // 0')
+            unk=$(echo "$totals" | jq -r '.UNKNOWN // 0')
+
+            echo "**Totals:** CRITICAL: $crit • HIGH: $high • MEDIUM: $med • LOW: $low • UNKNOWN: $unk" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # ---- Helper to render a per-report table ----
           trivy_table () {
             file="$1"
             if [ ! -f "$file" ]; then
