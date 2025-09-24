@@ -19,8 +19,8 @@ A tiny lab that demonstrates **secure CI/CD**:
 - `k3d cluster create labby`
 - `kubectl apply -f k8s/`
 # Tiny change to trigger CI
-<<<<<<< HEAD
+
 
 # force trigger
-=======
->>>>>>> 68b777c (chore: trigger CI from feature branch)
+
+68b777c (chore: trigger CI from feature branch)
