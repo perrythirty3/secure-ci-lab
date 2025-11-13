@@ -159,13 +159,13 @@ jobs:
 
       # --- Upload artifacts used by the summary job ---
       - name: Upload Trivy FS JSON
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: trivy-fs.json
           path: reports/trivy-fs.json
 
       - name: Upload Trivy Image JSON
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: trivy-image.json
           path: reports/trivy-image.json
