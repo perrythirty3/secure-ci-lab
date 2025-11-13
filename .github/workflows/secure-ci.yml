@@ -136,7 +136,7 @@ jobs:
           output: reports/trivy-image.json
           exit-code: '1'
       - name: Upload Image SARIF to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: reports/trivy-image.json
           category: trivy-image
@@ -152,7 +152,7 @@ jobs:
           vuln-type: os,library
 
       - name: Upload SARIF to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: reports/trivy-fs.sarif
           category: trivy-fs
