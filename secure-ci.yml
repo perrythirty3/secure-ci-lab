@@ -24,7 +24,7 @@ jobs:
   iac_scan:
     runs-on: ubuntu-latest
     steps:
-
+      - uses: actions/checkout@v4
 
       - name: Print trigger info (iac_scan)
         run: |
@@ -62,7 +62,7 @@ jobs:
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
     steps:
-
+      - uses: actions/checkout@v4
 
       - name: Print trigger info (build_and_scan)
         run: |
@@ -86,7 +86,7 @@ jobs:
       # OIDC (optional): runs only if AWS_ACCOUNT_ID env is non-empty
       - name: Configure AWS creds via OIDC
         if: ${{ env.AWS_ACCOUNT_ID != '' }}
-
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/GhActions-ReadSecrets
           aws-region: us-east-2
@@ -104,7 +104,7 @@ jobs:
 
       # JSON FS scan (for summary + artifacts)
       - name: Trivy FS scan (JSON)
-        uses: aquasecurity/trivy-action@0.14.0
+        uses: aquasecurity/trivy-action@0.33.1
         with:
           scan-type: fs
           format: json
@@ -114,7 +114,7 @@ jobs:
 
       # Optional stricter FS scan (don’t overwrite previous JSON)
       - name: "Trivy FS scan (deps: HIGH/CRITICAL gate)"
-        uses: aquasecurity/trivy-action@0.14.0
+        uses: aquasecurity/trivy-action@0.33.1
         with:
           scan-type: fs
           scan-ref: .
@@ -126,7 +126,7 @@ jobs:
           exit-code: '1'
 
       - name: Trivy Image scan (JSON)
-        uses: aquasecurity/trivy-action@0.14.0
+        uses: aquasecurity/trivy-action@0.33.1
         with:
           image-ref: ghcr.io/${{ github.repository }}/web:${{ github.sha }}
           ignore-unfixed: true
@@ -143,7 +143,7 @@ jobs:
 
       # --- SARIF for Security tab ---
       - name: Trivy FS scan (SARIF)
-        uses: aquasecurity/trivy-action@0.14.0
+        uses: aquasecurity/trivy-action@0.33.1
         with:
           scan-type: fs
           format: sarif
