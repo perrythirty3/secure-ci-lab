@@ -56,13 +56,13 @@ jobs:
       packages: write
       security-events: write
 
-      # security-events is inherited from the top-level
-
     env:
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
     steps:
 
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Print trigger info (build_and_scan)
         run: |
@@ -74,6 +74,7 @@ jobs:
           echo "Started at:  $TS"
           echo "Run URL:     https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           echo "::endgroup::"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
