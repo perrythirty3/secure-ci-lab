@@ -106,7 +106,7 @@ jobs:
 
       # JSON FS scan (for summary + artifacts)
       - name: Trivy FS scan (JSON)
-        uses: aquasecurity/trivy-action@0.14.0
+        uses: aquasecurity/trivy-action@0.34.0
         with:
           scan-type: fs
           format: json
@@ -116,7 +116,7 @@ jobs:
 
       # Optional stricter FS scan (don’t overwrite previous JSON)
       - name: "Trivy FS scan (deps: HIGH/CRITICAL gate)"
-        uses: aquasecurity/trivy-action@0.14.0
+        uses: aquasecurity/trivy-action@0.34.0
         with:
           scan-type: fs
           scan-ref: .
@@ -128,7 +128,7 @@ jobs:
           exit-code: '1'
 
       - name: Trivy Image scan (JSON)
-        uses: aquasecurity/trivy-action@0.14.0
+        uses: aquasecurity/trivy-action@0.34.0
         with:
           image-ref: ghcr.io/${{ github.repository }}/web:${{ github.sha }}
           ignore-unfixed: true
@@ -145,7 +145,7 @@ jobs:
 
       # --- SARIF for Security tab ---
       - name: Trivy FS scan (SARIF)
-        uses: aquasecurity/trivy-action@0.14.0
+        uses: aquasecurity/trivy-action@0.34.0
         with:
           scan-type: fs
           format: sarif
